@@ -104,12 +104,42 @@ def build_portfolio_table(holdings):
 
 	if not portfolio_df.empty:
 		total_value = portfolio_df["Market Value"].sum()
+		total_income = portfolio_df["Annual Income"].sum()
 		if total_value > 0:
 			portfolio_df["Allocation %"] = portfolio_df["Market Value"] / total_value
 		else:
 			portfolio_df["Allocation %"] = 0.0
 
+		if total_income > 0:
+			portfolio_df["Income %"] = portfolio_df["Annual Income"] / total_income
+		else:
+			portfolio_df["Income %"] = 0.0
+
 	return portfolio_df
+
+def build_monthly_dividend_breakdown(dividend_history, shares_owned):
+	if dividend_history is None or dividend_history.empty:
+		return pd.DataFrame()
+	df = dividend_history.copy()
+
+	df["Date"] = pd.to_datetime(df["Date"])
+	df["Year"] = df["Date"].dt.year
+	df["Month Number"] = df["Date"].dt.month
+	df["Month"] = df["Date"].dt.strftime("%b")
+	df["Year-Month"] = df["Date"].dt.strftime("%Y-%m")
+
+	df["Dividend Income"] = df["Dividend"] * shares_owned
+
+	monthly_df = (
+		df.groupby(["Year", "Month Number", "Month", "Year-Month"], as_index=False)
+		.agg(
+			Dividend_Per_Share=("Dividend", "sum"),
+			Estimated_Income=("Dividend Income", "sum")
+		)
+		.sort_values(["Year", "Month Number"])
+	)
+
+	return monthly_df
 
 st.set_page_config(
 	page_title="Stock Market Analytics Dashboard",
@@ -186,6 +216,8 @@ try:
 	estimated_annual_income = shares_owned * annual_dividend_per_share
 	estimated_monthly_income = estimated_annual_income / 12
 	position_value = shares_owned * stats["latest_close"]
+
+	monthly_dividend_df = build_monthly_dividend_breakdown(dividend_history, shares_owned)
 
 except Exception as exc:
 	st.error(f"Could not load data: {exc}")
@@ -390,6 +422,33 @@ else:
 	dividend_display["Dividend"] = dividend_display["Dividend"].round(4)
 	st.dataframe(dividend_display, width='stretch')
 
+st.subheader("Monthly Dividend Breakdown")
+
+if monthly_dividend_df.empty:
+	st.info("No monthly dividend data available for this ticker.")
+else:
+	monthly_display =  monthly_dividend_df.copy()
+	monthly_display["Dividend_Per_Share"] = monthly_display["Dividend_Per_Share"].round(4)
+	monthly_display["Estimated_Income"] = monthly_display["Estimated_Income"].round(2)
+
+	fig_monthly_dividends = px.bar(
+		monthly_display,
+		x="Year-Month",
+		y="Estimated_Income",
+		title="Estimated Monthly Dividend Income",
+	)
+	fig_monthly_dividends.update_layout(
+		xaxis_title="Month",
+		yaxis_title="Estimated Income ($)",
+		height=450,
+	)
+	st.plotly_chart(
+		fig_monthly_dividends,
+		config={"responsive": True, "displaylogo": False},
+	)
+
+	st.dataframe(monthly_display, use_container_width=True)
+
 st.markdown("---")
 st.header("Portfolio Mode")
 
@@ -400,28 +459,128 @@ else:
 	total_annual_income = portfolio_df["Annual Income"].sum()
 	total_monthly_income = portfolio_df["Monthly Income"].sum()
 
-	p1,p2,p3 = st.columns(3)
+	income_positive_df = portfolio_df[portfolio_df["Annual Income"] > 0].copy()
+
+	if income_positive_df.empty:
+		top_income_ticker = "N/A"
+		top_income_pct = 0.0
+	else:
+		top_row = income_positive_df.sort_values("Annual Income", ascending=False).iloc[0]
+		top_income_ticker = top_row["Ticker"]
+		top_income_pct = top_row["Income %"]
+
+	p1, p2, p3, p4, p5 = st.columns(5)
 	p1.metric("Total Portfolio Value", format_price(total_portfolio_value))
 	p2.metric("Total Annual Income", format_price(total_annual_income))
 	p3.metric("Total Monthly Dividend Income", format_price(total_monthly_income))
+	p4.metric("Top Income Contributor", top_income_ticker)
+	p5.metric("Top Contributor %", format_pct(top_income_pct))
+
+	"""
+	if not income_positive_df and top_income_pct > 0.4:
+		st.warning(f"{top_income_ticker} generates {format_pct()} of total dividend income. Income may be concentrated.")
+	"""
 
 st.subheader("Portfolio Breakdown")
 
 portfolio_display = portfolio_df.copy()
+portfolio_display = portfolio_display.sort_values("Annual Income", ascending=False)
 
-if not portfolio_display.empty:
-	for col in ["Price", "Market Value", "Annual Dividend/Share", "Annual Income", "Monthly Income"]:
-		portfolio_display[col] = portfolio_display[col].round(2)
 
-	portfolio_display["Allocation %"] = (portfolio_display["Allocation %"] * 100).round(2)
+for col in ["Price", "Market Value", "Annual Dividend/Share", "Annual Income", "Monthly Income"]:
+	portfolio_display[col] = portfolio_display[col].round(2)
 
-	st.dataframe(portfolio_display, width='stretch')
+portfolio_display["Allocation %"] = (portfolio_display["Allocation %"] * 100).round(2)
+portfolio_display["Income %"] = (portfolio_display["Income %"] * 100).round(2)
 
-if not portfolio_df.empty and portfolio_df["Market Value"].sum() > 0:
+st.dataframe(portfolio_display, width='stretch')
+
+st.subheader("Portfolio Dividend Income by Stock")
+
+portfolio_income_df = portfolio_df.copy()
+portfolio_income_df = portfolio_income_df[portfolio_income_df["Annual Income"] > 0]
+
+if portfolio_income_df.empty:
+	st.info("No dividend paying holdings found in portfolio.")
+else:
+	portfolio_income_df = portfolio_income_df.sort_values("Annual Income", ascending=False)
+
+	fig_income_by_stock = px.bar(
+		portfolio_income_df,
+		x="Ticker",
+		y="Annual Income",
+		title="Annual Dividend Income by Stock",
+		text="Annual Income",
+	)
+	fig_income_by_stock.update_traces(
+		texttemplate="$%{text:.2f}",
+		textposition="outside",
+	)
+	fig_income_by_stock.update_layout(
+		xaxis_title="Ticker",
+		yaxis_title="Annual Dividend Income ($)",
+		height=450,
+	)
+	st.plotly_chart(
+		fig_income_by_stock,
+		config={"responsive": True, "displaylogo": False}
+	)
+
+	st.subheader("Portfolio Monthly Dividend by Stock")
+
+	portfolio_monthly_df = portfolio_df.copy()
+	portfolio_monthly_df = portfolio_monthly_df[portfolio_monthly_df["Monthly Income"] > 0]
+
+	if portfolio_monthly_df.empty:
+		st.info("No monthly dividend income available for this portfolio.")
+	else:
+		portfolio_monthly_df = portfolio_monthly_df.sort_values("Monthly Income", ascending=False)
+
+		fig_monthly_income_by_stock = px.bar(
+			portfolio_monthly_df,
+			x="Ticker",
+			y="Monthly Income",
+			title="Average Monthly Dividend Income by Stock",
+			text="Monthly Income",
+		)
+		fig_monthly_income_by_stock.update_traces(
+			texttemplate="$%{text:.2f}",
+			textposition="outside",
+		)
+		fig_monthly_income_by_stock.update_layout(
+			xaxis_title="Ticker",
+			yaxis_title="Monthly Dividend Income ($)",
+			height=450,
+		)
+		st.plotly_chart(
+			fig_monthly_income_by_stock,
+			config={"responsive": True, "displaylogo": False},
+		)
+
+	st.subheader("Portfolio Dividend Income Concentration")
+
+	income_concentration_df = portfolio_df.copy()
+	income_concentration_df = income_concentration_df[income_concentration_df["Annual Income"] > 0]
+
+	if income_concentration_df.empty:
+		st.info("No dividend income data availability for concentration analysis.")
+	else:
+		income_concentration_df = income_concentration_df.sort_values("Annual Income", ascending=False)
+
+		fig_income_concentration = px.pie(
+			income_concentration_df,
+			names="Ticker",
+			values="Annual Income",
+			title="Dividend Income Concentration by Stock",
+		)
+		st.plotly_chart(
+			fig_income_concentration,
+			config={"responsive": True, "displaylogo": False}
+		)
+
 	st.subheader("Portfolio Allocation")
 
 	portfolio_chart_df = portfolio_df.copy()
-
 	# keep only rows with actual market value
 	portfolio_chart_df = portfolio_chart_df[portfolio_chart_df["Market Value"] > 0]
 
