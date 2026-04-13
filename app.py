@@ -6,147 +6,11 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data import get_price_data, merge_with_benchmark, get_dividend_data
-from indicators import (
-	add_indicators,
-	calculate_summary_stats,
-	format_pct,
-	format_price
-)
+from indicators import add_indicators, calculate_summary_stats, format_pct, format_price
+from portfolio import parse_portfolio_input, build_portfolio_table
+from dividends import build_monthly_dividend_breakdown
+from utils import dataframe_to_csv
 
-# Helper Function
-def parse_portfolio_input(text):
-	if text is None:
-		return []
-
-	text = text.strip()
-
-	if not text:
-		return []
-
-	holdings = []
-	lines = text.splitlines()
-
-	for line in lines:
-		line = line.strip()
-
-		if not line:
-			continue
-
-		parts = [part.strip() for part in line.split(",")]
-
-		if len(parts) != 2:
-			continue
-
-		ticker = parts[0].strip().upper()
-
-		try:
-			shares = float(parts[1])
-		except ValueError:
-			continue
-
-		holdings.append({"Ticker": ticker, "Shares": shares})
-
-	return holdings
-
-# Helper Function
-def build_portfolio_table(holdings):
-	if holdings is None:
-		return pd.DataFrame()
-
-	if len(holdings) == 0:
-		return pd.DataFrame()
-
-	rows = []
-
-	for holding in holdings:
-		ticker = holding["Ticker"]
-		shares = holding["Shares"]
-
-		try:
-			end_for_download = pd.Timestamp.today() + pd.Timedelta(days=1)
-
-			price_df = get_price_data(ticker, "2025-01-01", str(end_for_download.date()))
-
-			if price_df.empty:
-				raise ValueError(f"No price data returned for {ticker}")
-
-			latest_price = float(price_df["Close"].iloc[-1])
-
-			dividend_data = get_dividend_data(ticker)
-			annual_dividend_per_share = dividend_data["annual_dividend_per_share"]
-
-			market_value = shares * latest_price
-			annual_income = shares * annual_dividend_per_share
-			monthly_income = annual_income / 12
-
-			rows.append({
-				"Ticker": ticker,
-				"Shares": shares,
-				"Price": latest_price,
-				"Market Value": market_value,
-				"Annual Dividend/Share": annual_dividend_per_share,
-				"Annual Income": annual_income,
-				"Monthly Income": monthly_income,
-				"Error": ""
-			})
-
-		except Exception:
-			rows.append({
-				"Ticker": ticker,
-				"Shares": shares,
-				"Price": 0.0,
-				"Market Value": 0.0,
-				"Annual Dividend/Share": 0.0,
-				"Annual Income": 0.0,
-				"Monthly Income": 0.0,
-				"Error": str(exc)
-			})
-
-	portfolio_df = pd.DataFrame(rows)
-
-	if not portfolio_df.empty:
-		total_value = portfolio_df["Market Value"].sum()
-		total_income = portfolio_df["Annual Income"].sum()
-		if total_value > 0:
-			portfolio_df["Allocation %"] = portfolio_df["Market Value"] / total_value
-		else:
-			portfolio_df["Allocation %"] = 0.0
-
-		if total_income > 0:
-			portfolio_df["Income %"] = portfolio_df["Annual Income"] / total_income
-		else:
-			portfolio_df["Income %"] = 0.0
-
-	return portfolio_df
-
-# Helper Function
-def build_monthly_dividend_breakdown(dividend_history, shares_owned):
-	if dividend_history is None or dividend_history.empty:
-		return pd.DataFrame()
-	df = dividend_history.copy()
-
-	df["Date"] = pd.to_datetime(df["Date"])
-	df["Year"] = df["Date"].dt.year
-	df["Month Number"] = df["Date"].dt.month
-	df["Month"] = df["Date"].dt.strftime("%b")
-	df["Year-Month"] = df["Date"].dt.strftime("%Y-%m")
-
-	df["Dividend Income"] = df["Dividend"] * shares_owned
-
-	monthly_df = (
-		df.groupby(["Year", "Month Number", "Month", "Year-Month"], as_index=False)
-		.agg(
-			Dividend_Per_Share=("Dividend", "sum"),
-			Estimated_Income=("Dividend Income", "sum")
-		)
-		.sort_values(["Year", "Month Number"])
-	)
-
-	return monthly_df
-
-# Helper Function
-def dataframe_to_csv(df):
-	return df.to_csv(index=False).encode("utf-8")
 
 st.set_page_config(
 	page_title="Stock Market Analytics Dashboard",
@@ -154,10 +18,11 @@ st.set_page_config(
 )
 
 st.title("Stock Market Analytics Dashboard")
-st.caption("V1: price, trend, risk, benchmark comparison")
+st.caption("Price, Trend, Risk, Dividend Income, Portfolio Analytics, and Downloadable Data.")
 
 with st.sidebar:
 	st.header("Inputs")
+
 	ticker = st.text_input("Ticker", value="AAPL").upper().strip()
 	benchmark = st.text_input("Benchmark", value="SPY").upper().strip()
 
@@ -172,7 +37,7 @@ with st.sidebar:
 
 	st.markdown("---")
 	st.markdown(
-		"Tip: Start with large liquid tickers like 'AAPL', 'MSFT, 'NVDA', 'SPY'."
+		"Tip: Start with large liquid tickers like 'AAPL', 'MSFT', 'NVDA', 'SPY'."
 	)
 
 	st.markdown("---")
@@ -193,14 +58,14 @@ if start_date >= end_date:
 	st.stop()
 
 try:
-	#make end date inclusive
+	# Make end date inclusive
 	end_for_download = pd.to_datetime(end_date) + pd.Timedelta(days=1)
 
 	stock_df = get_price_data(ticker, str(start_date), str(end_for_download.date()))
 	benchmark_df = get_price_data(benchmark, str(start_date), str(end_for_download.date()))
 	dividend_data = get_dividend_data(ticker)
 
-	#handle empty data here
+	# Handle empty data here
 	if stock_df.empty:
 		st.warning("No trading data found for that ticker and date range. Try widening the dates.")
 		st.stop()
@@ -209,7 +74,7 @@ try:
 		st.warning("No benchmark data found. Try widening the dates.")
 		st.stop()
 
-	#only run calculations after data is confirmed valid
+	# Only run calculations after data is confirmed valid
 	stock_df = add_indicators(stock_df)
 	benchmark_df = add_indicators((benchmark_df))
 
@@ -231,10 +96,9 @@ except Exception as exc:
 	st.stop()
 
 portfolio_holdings = parse_portfolio_input(portfolio_text)
-st.write("Parsed holdings:", portfolio_holdings)
 portfolio_df = build_portfolio_table(portfolio_holdings)
 
-#Top Metrics
+# Top Metrics
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Latest Close", format_price(stats["latest_close"]))
 m2.metric("Total Return", format_pct(stats["total_return"]))
@@ -249,7 +113,7 @@ d2.metric("Annual Dividend / Share", format_price(annual_dividend_per_share))
 d3.metric("Estimated Annual Income", format_price(estimated_annual_income))
 d4.metric("Estimated Monthly Income", format_price(estimated_monthly_income))
 
-#Price Chart
+# Price Chart
 st.subheader(f"{ticker} Price")
 
 if chart_type == "Line":
@@ -315,7 +179,7 @@ fig_price.update_layout(
 )
 st.plotly_chart(
 	fig_price,
-	config={"responsive": True}
+	config={"responsive": True, "displaylogo": False},
 )
 
 # Benchmark Comparison
@@ -345,7 +209,7 @@ fig_compare.update_layout(
 )
 st.plotly_chart(
 	fig_compare,
-	config={"responsive": True}
+	config={"responsive": True, "displaylogo": False},
 )
 
 left, right = st.columns(2)
@@ -355,7 +219,7 @@ with left:
 	fig_hist = px.histogram(
 		stock_df.dropna(subset=["Daily Return"]),
 		x="Daily Return",
-		nbins=50
+		nbins=50,
 	)
 	fig_hist.update_layout(
 		xaxis_title="Daily Return",
@@ -364,7 +228,7 @@ with left:
 	)
 	st.plotly_chart(
 		fig_hist,
-		config={"responsive": True}
+		config={"responsive": True, "displaylogo": False},
 	)
 
 with right:
@@ -385,10 +249,10 @@ with right:
 	)
 	st.plotly_chart(
 		fig_drawdown,
-		config={"responsive": True}
+		config={"responsive": True, "displaylogo": False},
 	)
 
-#Recent data and summary
+# Recent data and summary
 st.subheader("Summary")
 
 summary_col1, summary_col2 = st.columns(2)
@@ -397,6 +261,7 @@ with summary_col1:
 	st.write(f"**Benchmark:** {benchmark}")
 	st.write(f"**Start:** {start_date}")
 	st.write(f"**End:** {end_date}")
+	st.write(f"**Position Value:** {format_price(position_value)}")
 
 with summary_col2:
 	st.write(f"**Mean Daily Return:** {format_pct(stats['mean_daily_return'])}")
@@ -514,57 +379,59 @@ else:
 		st.warning(f"{top_income_ticker} generates {format_pct()} of total dividend income. Income may be concentrated.")
 	"""
 
-st.subheader("Portfolio Breakdown")
+	st.subheader("Portfolio Breakdown")
 
-portfolio_display = portfolio_df.copy()
-portfolio_display = portfolio_display.sort_values("Annual Income", ascending=False)
+	portfolio_display = portfolio_df.copy()
+	portfolio_display = portfolio_display.sort_values("Annual Income", ascending=False)
 
 
-for col in ["Price", "Market Value", "Annual Dividend/Share", "Annual Income", "Monthly Income"]:
-	portfolio_display[col] = portfolio_display[col].round(2)
+	for col in ["Price", "Market Value", "Annual Dividend/Share", "Annual Income", "Monthly Income"]:
+		portfolio_display[col] = portfolio_display[col].round(2)
 
-portfolio_display["Allocation %"] = (portfolio_display["Allocation %"] * 100).round(2)
-portfolio_display["Income %"] = (portfolio_display["Income %"] * 100).round(2)
+	portfolio_display["Allocation %"] = (portfolio_display["Allocation %"] * 100).round(2)
 
-st.dataframe(portfolio_display, width='stretch')
+	if "Income %" in portfolio_display.columns:
+		portfolio_display["Income %"] = (portfolio_display["Income %"] * 100).round(2)
 
-st.download_button(
-	label="Download Portfolio Breakdown CSV",
-	data=dataframe_to_csv(portfolio_display),
-	file_name="portfolio_breakdown.csv",
-	mime="text/csv",
-)
+	st.dataframe(portfolio_display, width='stretch')
 
-st.subheader("Portfolio Dividend Income by Stock")
-
-portfolio_income_df = portfolio_df.copy()
-portfolio_income_df = portfolio_income_df[portfolio_income_df["Annual Income"] > 0]
-
-if portfolio_income_df.empty:
-	st.info("No dividend paying holdings found in portfolio.")
-else:
-	portfolio_income_df = portfolio_income_df.sort_values("Annual Income", ascending=False)
-
-	fig_income_by_stock = px.bar(
-		portfolio_income_df,
-		x="Ticker",
-		y="Annual Income",
-		title="Annual Dividend Income by Stock",
-		text="Annual Income",
+	st.download_button(
+		label="Download Portfolio Breakdown CSV",
+		data=dataframe_to_csv(portfolio_display),
+		file_name="portfolio_breakdown.csv",
+		mime="text/csv",
 	)
-	fig_income_by_stock.update_traces(
-		texttemplate="$%{text:.2f}",
-		textposition="outside",
-	)
-	fig_income_by_stock.update_layout(
-		xaxis_title="Ticker",
-		yaxis_title="Annual Dividend Income ($)",
-		height=450,
-	)
-	st.plotly_chart(
-		fig_income_by_stock,
-		config={"responsive": True, "displaylogo": False}
-	)
+
+	st.subheader("Portfolio Dividend Income by Stock")
+
+	portfolio_income_df = portfolio_df.copy()
+	portfolio_income_df = portfolio_income_df[portfolio_income_df["Annual Income"] > 0]
+
+	if portfolio_income_df.empty:
+		st.info("No dividend paying holdings found in portfolio.")
+	else:
+		portfolio_income_df = portfolio_income_df.sort_values("Annual Income", ascending=False)
+
+		fig_income_by_stock = px.bar(
+			portfolio_income_df,
+			x="Ticker",
+			y="Annual Income",
+			title="Annual Dividend Income by Stock",
+			text="Annual Income",
+		)
+		fig_income_by_stock.update_traces(
+			texttemplate="$%{text:.2f}",
+			textposition="outside",
+		)
+		fig_income_by_stock.update_layout(
+			xaxis_title="Ticker",
+			yaxis_title="Annual Dividend Income ($)",
+			height=450,
+		)
+		st.plotly_chart(
+			fig_income_by_stock,
+			config={"responsive": True, "displaylogo": False}
+		)
 
 	st.subheader("Portfolio Monthly Dividend by Stock")
 
@@ -621,7 +488,6 @@ else:
 	st.subheader("Portfolio Allocation")
 
 	portfolio_chart_df = portfolio_df.copy()
-	# keep only rows with actual market value
 	portfolio_chart_df = portfolio_chart_df[portfolio_chart_df["Market Value"] > 0]
 
 	if portfolio_chart_df.empty:
