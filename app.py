@@ -13,6 +13,7 @@ from indicators import (
 	format_price
 )
 
+# Helper Function
 def parse_portfolio_input(text):
 	if text is None:
 		return []
@@ -47,6 +48,7 @@ def parse_portfolio_input(text):
 
 	return holdings
 
+# Helper Function
 def build_portfolio_table(holdings):
 	if holdings is None:
 		return pd.DataFrame()
@@ -117,6 +119,7 @@ def build_portfolio_table(holdings):
 
 	return portfolio_df
 
+# Helper Function
 def build_monthly_dividend_breakdown(dividend_history, shares_owned):
 	if dividend_history is None or dividend_history.empty:
 		return pd.DataFrame()
@@ -140,6 +143,10 @@ def build_monthly_dividend_breakdown(dividend_history, shares_owned):
 	)
 
 	return monthly_df
+
+# Helper Function
+def dataframe_to_csv(df):
+	return df.to_csv(index=False).encode("utf-8")
 
 st.set_page_config(
 	page_title="Stock Market Analytics Dashboard",
@@ -410,7 +417,19 @@ display_cols = [
 	"Daily Return",
 	"Drawdown",
 ]
-st.dataframe(stock_df[display_cols].tail(20), width='stretch')
+
+display_df = stock_df[display_cols].tail(20).copy()
+numeric_cols = display_df.select_dtypes(include="number").columns
+display_df[numeric_cols] = display_df[numeric_cols].round(4)
+
+st.dataframe(display_df, width='stretch')
+
+st.download_button(
+	label="Download Recent Stock Data CSV",
+	data=dataframe_to_csv(display_df),
+	file_name=f"{ticker.lower()}_recent_data.csv",
+	mime="text/csv",
+)
 
 st.subheader("Dividend History")
 
@@ -421,6 +440,13 @@ else:
 	dividend_display["Date"] = pd.to_datetime(dividend_display["Date"]).dt.date
 	dividend_display["Dividend"] = dividend_display["Dividend"].round(4)
 	st.dataframe(dividend_display, width='stretch')
+
+	st.download_button(
+		label="Download Dividend History CSV",
+		data=dataframe_to_csv(dividend_display),
+		file_name=f"{ticker.lower()}_dividend_history.csv",
+		mime="text/csv",
+	)
 
 st.subheader("Monthly Dividend Breakdown")
 
@@ -448,6 +474,13 @@ else:
 	)
 
 	st.dataframe(monthly_display, use_container_width=True)
+
+	st.download_button(
+		label="Download Monthly Dividend Breakdown CSV",
+		data=dataframe_to_csv(monthly_display),
+		file_name=f"{ticker.lower()}_monthly_dividend_breakdown.csv",
+		mime="text/csv",
+	)
 
 st.markdown("---")
 st.header("Portfolio Mode")
@@ -494,6 +527,13 @@ portfolio_display["Allocation %"] = (portfolio_display["Allocation %"] * 100).ro
 portfolio_display["Income %"] = (portfolio_display["Income %"] * 100).round(2)
 
 st.dataframe(portfolio_display, width='stretch')
+
+st.download_button(
+	label="Download Portfolio Breakdown CSV",
+	data=dataframe_to_csv(portfolio_display),
+	file_name="portfolio_breakdown.csv",
+	mime="text/csv",
+)
 
 st.subheader("Portfolio Dividend Income by Stock")
 
