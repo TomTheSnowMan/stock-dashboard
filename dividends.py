@@ -1,6 +1,21 @@
+from __future__ import annotations
+
 import pandas as pd
 
-def build_monthly_dividend_breakdown(dividend_history, shares_owned):
+def build_monthly_dividend_breakdown(
+        dividend_history: pd.DataFrame,
+        shares_owned: float,
+) -> pd.DataFrame:
+    """
+    Build a monthly dividend breakdown from dividend history.
+    Returns a DataFrame with:
+    - Year
+    - Month Number
+    - Month
+    - Year-Month
+    - Dividend_Per_Share
+    - Estimated_Income
+    """
     if dividend_history is None or dividend_history.empty:
         return pd.DataFrame()
 

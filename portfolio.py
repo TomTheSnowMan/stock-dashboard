@@ -1,7 +1,19 @@
+from __future__ import annotations
+
 import pandas as pd
+
 from data import get_price_data, get_dividend_data
 
-def parse_portfolio_input(text):
+def parse_portfolio_input(text: str) -> list[dict[str, float | str]]:
+    """
+    Parse multiline portfolio input in the form:
+    TICKER, SHARES
+
+    Example:
+    AAPL, 10
+    MSFT, 5
+    KO, 20
+    """
     if text is None:
         return []
 
@@ -10,7 +22,7 @@ def parse_portfolio_input(text):
     if not text:
         return []
 
-    holdings = []
+    holdings: list[dict[str, float | str]] = []
     lines = text.splitlines()
 
     for line in lines:
@@ -31,19 +43,26 @@ def parse_portfolio_input(text):
         except ValueError:
             continue
 
-        holdings.append({"Ticker": ticker, "Shares": shares})
+        holdings.append({
+            "Ticker": ticker,
+            "Shares": shares,
+        })
 
     return holdings
 
-def build_portfolio_table(holdings):
+def build_portfolio_table(holdings: list[dict[str, float | str]]) -> pd.DataFrame:
+    """
+    Build a portfolio table with price, market value, annual income,
+    monthly income, allocation %, and income %.
+    """
     if holdings is None or len(holdings) == 0:
         return pd.DataFrame()
 
-    rows = []
+    rows: list[dict[str, float | str]] = []
 
     for holding in holdings:
-        ticker = holding["Ticker"]
-        shares = holding["Shares"]
+        ticker = str(holding["Ticker"])
+        shares = float(holding["Shares"])
 
         try:
             end_for_download = pd.Timestamp.today() + pd.Timedelta(days=1)
