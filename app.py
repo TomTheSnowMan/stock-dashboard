@@ -537,6 +537,8 @@ else:
 	existing_months = [m for m in month_order if m in calendar_pivot.columns]
 	calendar_pivot = calendar_pivot.reindex(columns=existing_months, fill_value=0.0)
 
+	calendar_pivot["Yearly Total"] = calendar_pivot.sum(axis=1)
+
 	totals_row = calendar_pivot.sum(axis=0).to_frame().T
 	totals_row.index = ["Total Portfolio Income"]
 
