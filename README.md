@@ -1,3 +1,6 @@
+## Live App
+https://43jwpuynpfibja8dgfldkd.streamlit.app/
+
 # Stock Market Analytics Dashboard
 
 A Python + Streamlit web app for stock analyis, dividend income tracking, and portfolio analytics.
