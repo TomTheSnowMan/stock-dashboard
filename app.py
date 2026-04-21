@@ -528,7 +528,7 @@ else:
 			columns="Month",
 			values="Estimated Income",
 			aggfunc="sum",
-			fill_values=0.0,
+			fill_value=0.0,
 		)
 	)
 
