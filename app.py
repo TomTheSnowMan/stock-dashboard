@@ -515,7 +515,7 @@ if not premium_enabled:
 else:
 	calendar_display = portfolio_calendar_df.copy()
 	calendar_display["Estimated Income"] = calendar_display["Estimated Income"].round(2)
-	calendar_display["Total Income"] = calendar_display["Total Income"].round(2)
+	calendar_display["Total_Income"] = calendar_display["Total_Income"].round(2)
 
 	st.subheader("Dividend Payments by Stock and Month")
 	st.dataframe(calendar_display, use_container_width=True)
