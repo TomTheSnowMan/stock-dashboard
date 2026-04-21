@@ -345,7 +345,7 @@ else:
 		config={"responsive": True, "displaylogo": False},
 	)
 
-	st.dataframe(monthly_display, use_container_width=True)
+	st.dataframe(monthly_display, width="stretch")
 
 	st.download_button(
 		label="Download Monthly Dividend Breakdown CSV",
@@ -518,7 +518,7 @@ else:
 	calendar_display["Total_Income"] = calendar_display["Total_Income"].round(2)
 
 	st.subheader("Dividend Payments by Stock and Month")
-	st.dataframe(calendar_display, use_container_width=True)
+	st.dataframe(calendar_display, width="stretch")
 
 	st.subheader("Monthly Income Calendar")
 
@@ -543,7 +543,7 @@ else:
 	calendar_full = pd.concat([calendar_pivot, totals_row], axis=0)
 	calendar_full = calendar_full.round(2)
 
-	st.dataframe(calendar_full, use_container_width=True)
+	st.dataframe(calendar_full, width="stretch")
 
 	st.download_button(
 		label="Download Dividend Calendar CSV",
