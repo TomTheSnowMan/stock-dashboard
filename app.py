@@ -503,3 +503,8 @@ else:
 		fig_portfolio,
 		config={"responsive": True, "displaylogo": False}
 	)
+
+st.markdown("---")
+st.caption(
+	"Built by TomTheSnowMan | Data: Yahoo Finance (yfinance) | For educational use only"
+)
