@@ -8,7 +8,7 @@ import streamlit as st
 from data import get_price_data, merge_with_benchmark, get_dividend_data
 from indicators import add_indicators, calculate_summary_stats, format_pct, format_price
 from portfolio import parse_portfolio_input, build_portfolio_table
-from dividends import build_monthly_dividend_breakdown
+from dividends import build_monthly_dividend_breakdown, build_portfolio_dividend_calendar
 from utils import dataframe_to_csv
 
 
@@ -48,6 +48,12 @@ with st.sidebar:
 		value="AAPL,10\nMSFT,5\nKO,20\nO,30",
 		height=150,
 	)
+
+	st.markdown("---")
+	st.subheader("Premium Access")
+	premium_password = st.text_input("Enter Premium Password", type="password")
+
+premium_enabled = premium_password == "dividendpro"
 
 if not ticker:
 	st.warning("Enter a ticker to begin.")
@@ -97,6 +103,7 @@ except Exception as exc:
 
 portfolio_holdings = parse_portfolio_input(portfolio_text)
 portfolio_df = build_portfolio_table(portfolio_holdings)
+portfolio_calendar_df = build_portfolio_dividend_calendar(portfolio_df)
 
 # Top Metrics
 m1, m2, m3, m4 = st.columns(4)
@@ -498,6 +505,51 @@ else:
 	st.plotly_chart(
 		fig_portfolio,
 		config={"responsive": True, "displaylogo": False}
+	)
+
+st.markdown("---")
+st.header("Premium: Portfolio Dividend Calendar")
+
+if not premium_enabled:
+	st.info("Premium feature locked. Enter the premium password in the sidebar to view the dividend calendar.")
+else:
+	calendar_display = portfolio_calendar_df.copy()
+	calendar_display["Estimated Income"] = calendar_display["Estimated Income"].round(2)
+	calendar_display["Total Income"] = calendar_display["Total Income"].round(2)
+
+	st.subheader("Dividend Payments by Stock and Month")
+	st.dataframe(calendar_display, use_container_width=True)
+
+	st.subheader("Monthly Income Calendar")
+
+	calendar_pivot = (
+		calendar_display.pivot_table(
+			index="Ticker",
+			columns="Month",
+			values="Estimated Income",
+			aggfunc="sum",
+			fill_values=0.0,
+		)
+	)
+
+	month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+	existing_months = [m for m in month_order if m in calendar_pivot.columns]
+	calendar_pivot = calendar_pivot.reindex(columns=existing_months, fill_value=0.0)
+
+	totals_row = calendar_pivot.sum(axis=0).to_frame().T
+	totals_row.index = ["Total Portfolio Income"]
+
+	calendar_full = pd.concat([calendar_pivot, totals_row], axis=0)
+	calendar_full = calendar_full.round(2)
+
+	st.dataframe(calendar_full, use_container_width=True)
+
+	st.download_button(
+		label="Download Dividend Calendar CSV",
+		data=dataframe_to_csv(calendar_display),
+		file_name="portfolio_dividend_calendar.csv",
+		mime="text/csv",
 	)
 
 st.markdown("---")
