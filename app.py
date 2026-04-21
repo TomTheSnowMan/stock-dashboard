@@ -374,10 +374,10 @@ else:
 	p4.metric("Top Income Contributor", top_income_ticker)
 	p5.metric("Top Contributor %", format_pct(top_income_pct))
 
-	"""
+
 	if not income_positive_df and top_income_pct > 0.4:
 		st.warning(f"{top_income_ticker} generates {format_pct()} of total dividend income. Income may be concentrated.")
-	"""
+
 
 	st.subheader("Portfolio Breakdown")
 
