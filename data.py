@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pandas as pd
 import streamlit as st
 import yfinance as yf
@@ -14,20 +16,48 @@ def get_price_data(ticker: str, start: str, end: str) ->pd.DataFrame:
 		end=end,
 		auto_adjust=True,
 		progress=False,
+		actions=False,
+		threads=False,
 	)
+
+	# Fallback: try Ticker.history if download returns nothings
+	if df.empty:
+		stock = yf.Ticker(ticker)
+		df = stock.history(
+			start=start,
+			end=end,
+			auto_adjust=True,
+			actions=False,
+		)
+
+	if df.empty:
+		return pd.DataFrame()
 
 	# Flatten MultiIndex columns if returned by yfinance
 	if isinstance(df.columns, pd.MultiIndex):
 		df.columns = df.columns.get_level_values(0)
-	if df.empty:
-		return pd.DataFrame
 
 	df = df.reset_index()
-	df["Date"] = pd.to_datetime(df["Date"])
+
+	if "Date" not in df.columns:
+		# history() can sometimes return DateTime instead
+		if "DateTime" in df.columns:
+			df = df.rename(columns={"Datetime": "Date"})
+		else:
+			df = df.rename_axis("Date").reset_index()
+
+	df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None, nonexistent="NaT", ambiguous="NaT")
+	df = df.sort_values("Date").reset_index(drop=True)
+
+	expected_cols = ["Open", "High", "Low", "Close", "Volume"]
+	for col in expected_cols:
+		if col not in df.columns:
+			df[col] = 0.0
 
 	return df
 
 def merge_with_benchmark(stock_df, benchmark_df, stock_ticker, benchmark_ticker):
+
 	stock = stock_df[["Date", "Close"]].copy()
 	bench = benchmark_df[["Date", "Close"]].copy()
 
